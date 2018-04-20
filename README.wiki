@@ -1,0 +1,14 @@
+This modules provides a simplified access to a dsp402 enabled device.
+
+= Configuration =
+
+ - name: my_dsp402
+   so_file: libmodule_dsp402.so
+   config: 
+     TODO
+   power_up: op
+
+; k.a.
+: desc
+
+[[Category:Robotkernel-5|Dsp402]]
