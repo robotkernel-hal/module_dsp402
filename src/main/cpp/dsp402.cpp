@@ -20,15 +20,14 @@
  * along with robotkernel.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "moddsp402.h"
+#include <algorithm>
+#include <cctype>
+
+#include "dsp402.h"
+
 #include "robotkernel/helpers.h"
 #include "robotkernel/kernel.h"
 #include "robotkernel/exceptions.h"
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/select.h>
-#include <errno.h>
-#include <sys/stat.h>
 
 MODULE_DEF(module_dsp402, module_dsp402::dsp402);
 
@@ -37,19 +36,241 @@ using namespace robotkernel;
 using namespace module_dsp402;
 using namespace string_util;
 
+const static uint16_t STATUS_QUICK_STOP_MASK        = 0x0020;
+
+const static uint16_t STATUS_MASK                   = 0x004F;
+const static uint16_t STATUS_NOT_READY_TO_SWITCH_ON = 0x0000;
+const static uint16_t STATUS_SWITCH_ON_DISABLED     = 0x0040;
+const static uint16_t STATUS_READY_TO_SWITCH_ON     = 0x0001;
+const static uint16_t STATUS_SWITCH_ON              = 0x0003;
+const static uint16_t STATUS_OPERATION_ENABLED      = 0x0007;
+
+const static uint16_t STATUS_FAULT                  = 0x0008;
+const static uint16_t STATUS_FAULT_REACTION_ACTIVE  = 0x000F;
+
+const static uint16_t CONTROL_MASK                  = 0x000F;
+const static uint16_t CONTROL_SHUTDOWN              = 0x0006;
+const static uint16_t CONTROL_SWITCH_ON             = 0x0007;
+const static uint16_t CONTROL_ENABLE_OPERATION      = 0x000F;
+
+const static uint16_t CONTROL_FAULT_RESET           = 0x0080;
+
+static std::map<std::string, size_t> datatype_to_size = {
+    { "uint8_t",  1 },
+    { "uint16_t", 2 },
+    { "uint24_t", 3 },
+    { "uint32_t", 4 },
+    { "uint40_t", 5 },
+    { "uint48_t", 6 },
+    { "uint56_t", 7 },
+    { "uint64_t", 8 },
+    { "int8_t",   1 },
+    { "int16_t",  2 },
+    { "int24_t",  3 },
+    { "int32_t",  4 },
+    { "int40_t",  5 },
+    { "int48_t",  6 },
+    { "int56_t",  7 },
+    { "int64_t",  8 },
+    { "float",    4 },
+    { "double",   8 },
+};
+
+dsp402_device::dsp402_device(dsp402 *parent, const YAML::Node& node) :
+    pd_consumer(parent->name), pd_provider(parent->name), parent(parent)
+{
+    name = get_as<string>(node, "name");
+    user_inputs_name    = get_as<string>(node, "pdin");
+    user_outputs_name   = get_as<string>(node, "pdout");
+    state_word_offset   = get_as<unsigned>(node, "state_word_offset", 0u);
+    control_word_offset = get_as<unsigned>(node, "control_word_offset", 0u);
+}
+
+dsp402_device::~dsp402_device() {
+}
+
+std::string create_process_data_definition(const std::string& input_definition, 
+        off_t& local_offset, std::string field_name, off_t& field_offset) {
+    std::transform(field_name.begin(), field_name.end(), field_name.begin(),                     
+            [](unsigned char c){ return std::tolower(c); });
+
+    auto node = YAML::Load(input_definition);
+
+    YAML::Emitter emitter;
+    emitter << YAML::BeginSeq;
+    for (const auto& entry : node) {
+        emitter << YAML::BeginMap;
+
+        for (const auto& kv: entry) {
+            
+            std::string __datatype_name = kv.first.as<std::string>();
+            std::string __field_name    = kv.second.as<std::string>();
+            std::string __ifield_name   = __field_name;
+            std::transform(__ifield_name.begin(), __ifield_name.end(), __ifield_name.begin(), 
+                    [](unsigned char c){ return std::tolower(c); });
+
+            if (__ifield_name == field_name) {
+                field_offset = local_offset;
+
+                emitter << YAML::Key << "uint8_t" << YAML::Value << "power";
+                emitter << YAML::EndMap << YAML::BeginMap;
+                emitter << YAML::Key << "uint8_t" << YAML::Value << "brakes";
+                emitter << YAML::EndMap << YAML::BeginMap;
+                emitter << YAML::Key << "uint8_t" << YAML::Value << "fault";
+                
+                local_offset += sizeof(dsp402_device::control_t);
+            }
+
+            emitter << YAML::Key << __datatype_name << YAML::Value << __field_name;
+            local_offset += datatype_to_size[__datatype_name];
+        }
+
+        emitter << YAML::EndMap;
+    }
+
+    return std::string(emitter.c_str());
+}
+
+void dsp402_device::open() {
+    kernel& k = *kernel::get_instance();
+    
+    user_inputs.pd       = k.get_process_data(user_inputs_name);
+    user_inputs.hash     = user_inputs.pd->set_consumer(shared_from_this());
+    user_inputs.trigger  = k.get_trigger(user_inputs.pd->clk_device);
+    
+    user_outputs.pd      = k.get_process_data(user_outputs_name);
+    user_outputs.hash    = user_outputs.pd->set_provider(shared_from_this());
+    user_outputs.trigger = k.get_trigger(user_outputs.pd->clk_device);
+
+
+    off_t inputs_length;
+    std::string inputs_def = create_process_data_definition(
+            user_inputs.pd->process_data_definition, inputs_length, 
+            "statusword", state_word_offset);
+    inputs.trigger       = make_shared<trigger>(parent->name, name + ".inputs");
+    inputs.pd            = make_shared<triple_buffer>(inputs_length,
+            parent->name, name + ".inputs", inputs_def, inputs.trigger->id());
+    inputs.hash          = inputs.pd->set_provider(shared_from_this());
+
+    off_t outputs_length;
+    std::string outputs_def = create_process_data_definition(
+            user_outputs.pd->process_data_definition, outputs_length, 
+            "controlword", control_word_offset);
+    outputs.trigger      = make_shared<trigger>(parent->name, name + ".outputs");
+    outputs.pd           = make_shared<triple_buffer>(outputs_length,
+            parent->name, name + ".outputs", outputs_def, outputs.trigger->id());
+    outputs.hash         = outputs.pd->set_consumer(shared_from_this());
+
+    user_inputs.trigger->add_trigger(shared_from_this());
+}
+
+void dsp402_device::close() {
+    if (user_inputs.trigger) {
+        user_inputs.trigger->remove_trigger(shared_from_this());
+        user_inputs.trigger = nullptr;
+    }
+
+    
+    
+}
+
+
+/*
+USER_INPUTS (from device)       ->  INPUTS (our own device)
+u16 : Statusword                    u16 : Statusword
+                                    u8  : Power
+                                    u8  : Brake
+                                    u8  : Fault
+u8  : ModeOfOperationDisplay        u8  : ModeOfOperationDisplay
+u8  : Padding                       u8  : Padding
+....
+
+state_word_offset = 0
+
+
+OUTPUTS (our own device)        ->  USER_OUTPUTS (to device)
+u16 : Controlword                   u16 : Controlword
+u8  : Power
+u8  : Brake
+u8  : Fault
+u8  : ModeOfOperation               u8  : ModeOfOperation
+u8  : Padding                       u8  : Padding
+....
+
+control_word_offset = 0
+
+*/
+
+void dsp402_device::tick() {
+    auto inputs_buf = inputs.pd->next(inputs.hash);
+    auto outputs_buf = outputs.pd->pop(outputs.hash);
+
+    auto user_inputs_buf = user_inputs.pd->pop(user_inputs.hash);
+    auto user_outputs_buf = user_outputs.pd->next(user_outputs.hash);
+
+    control_t inputs_control, outputs_control;
+
+    if (state_word_offset > 0) 
+        memcpy(&inputs_buf[0], &user_inputs_buf[0], state_word_offset + 2); // copy with state word
+    if (control_word_offset > 0)
+        memcpy(&user_outputs_buf[0], &outputs_buf[0], control_word_offset);
+
+    memcpy(&outputs_control, &outputs_buf[control_word_offset + 2], sizeof(control_t));
+
+    uint16_t status_word  = *(uint16_t *)&user_inputs_buf[state_word_offset];
+    uint16_t control_word = *(uint16_t *)&outputs_buf[control_word_offset];
+
+    switch (status_word & STATUS_MASK) {
+        default: 
+            inputs_control.power = 0;
+            break;
+        case STATUS_READY_TO_SWITCH_ON: // 0x0001
+            control_word = (control_word & ~CONTROL_MASK) | CONTROL_SHUTDOWN;
+            break;
+        case STATUS_SWITCH_ON:          // 0x0003
+            control_word = (control_word & ~CONTROL_MASK) | CONTROL_SWITCH_ON;
+            break;
+        case STATUS_OPERATION_ENABLED:  // 0x0007
+            inputs_control.power = 1;
+            inputs_control.fault = 0;
+
+            if (outputs_control.power == 1)
+                control_word = (control_word & ~CONTROL_MASK) | CONTROL_ENABLE_OPERATION;
+            else 
+                control_word = (control_word & ~CONTROL_MASK) | CONTROL_SWITCH_ON;
+            break;
+        case STATUS_FAULT:
+        case STATUS_FAULT_REACTION_ACTIVE:
+            inputs_control.fault = status_word & STATUS_MASK;
+            break;
+    }
+
+    // inputs
+    memcpy(&inputs_buf[state_word_offset + 2], &inputs_control, sizeof(control_t));
+    memcpy(&inputs_buf[state_word_offset + 2 + sizeof(control_t)],
+            &user_inputs_buf[state_word_offset] + 2, user_inputs.pd->length - state_word_offset - 2); 
+    inputs.pd->push(inputs.hash);
+
+    // outputs
+    memcpy(&user_outputs_buf[control_word_offset], &control_word, sizeof(control_word));
+    memcpy(&user_outputs_buf[control_word_offset + sizeof(control_word)], 
+            &outputs_buf[control_word_offset + sizeof(control_t)], 
+            outputs.pd->length - control_word_offset - sizeof(control_t));
+    user_outputs.pd->push(user_outputs.hash);
+}
+
 //! construction
 /*
  * \param name fts name
  * \param node YAML configuration node
  */
 dsp402::dsp402(const char *name, const YAML::Node& node) :
-    module_base("module_dsp402", name, node),
-    stream(name, "dsp402")
+    module_base("module_dsp402", name, node) 
 {
-    fd                    = -1;
-    dsp402_name             = get_as<std::string>(node, "dsp402_name");
-
     set_state(module_state_init);
+
+    for (const auto& dev : node["devices"])
+        devices.push_back(make_shared<dsp402_device>(this, dev)); 
 }
 
 //! destruction
@@ -58,31 +279,11 @@ dsp402::~dsp402() {
     set_state(module_state_init);
 }
 
-size_t dsp402::read(void* buf, size_t bufsize) {
-    if (state < module_state_safeop) {
-        log(warning, "invalid state for reading data\n");
-        // invalid state
-        return 0;
-    }
-
-    return ::read(fd, buf, bufsize);
-}
-
-size_t dsp402::write(void* buf, size_t bufsize) {
-    if (state < module_state_op)
-        // invalid state
-        return 0;
-
-    return ::write(fd, buf, bufsize);
-}
-
 //! set fts state
 /*!
  * \param state new fts state
  */
 int dsp402::set_state(module_state_t state) {
-    kernel& k = *kernel::get_instance();
-
     // get transition
     uint32_t transition = GEN_STATE(this->state, state);
 
@@ -96,6 +297,9 @@ int dsp402::set_state(module_state_t state) {
         case safeop_2_preop:
         case safeop_2_init:
             // ====> stop receiving measurements
+            for (const auto& dev : devices)
+                dev->close();
+
             if (    (transition == op_2_preop) ||
                     (transition == safeop_2_preop))
                 break;
@@ -103,10 +307,7 @@ int dsp402::set_state(module_state_t state) {
             // ====> deinit devices
             
             // remove stream device
-            k.remove_device(shared_from_this());
-
-            close(fd);
-            fd = -1;
+            //k.remove_device(shared_from_this());
         case init_2_init:
             // ====> do nothing
             break;
@@ -115,20 +316,17 @@ int dsp402::set_state(module_state_t state) {
         case init_2_safeop:
         case init_2_preop:
             // ====> initial devices            
-            log(info, "opening dsp402 %s ...\n", dsp402_name.c_str());
-
-            fd = open(dsp402_name.c_str(), O_RDWR | O_CREAT);
-            if (fd == -1)
-                throw str_exception("open %s: %s", dsp402_name.c_str(), strerror(errno));
-            
             // add stream device
-            k.add_device(shared_from_this());
+            //k.add_device(shared_from_this());
 
             if (    (transition == init_2_preop))
                 break;
         case preop_2_op:
         case preop_2_safeop:
             // ====> start receiving measurements
+            for (const auto& dev : devices)
+                dev->open();
+
             if (    (transition == init_2_safeop) ||
                     (transition == preop_2_safeop))
                 break;
