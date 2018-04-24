@@ -13,10 +13,22 @@ This modules provides a simplified access to a dsp402 enabled device.
          control_word_name: controlword
          status_word_offset: 0
          control_word_offset: 0
-     TODO
    power_up: op
 
-; k.a.
-: desc
+; name
+: This field should be a unique name. The new process data devices will be registered with names like '''my_dsp402.wheel_left.inputs.pd'''.
+; pdin
+: Specifies an existing process data device where the inputs will be read.
+; pdout
+: Specifies an existing process data device where the outputs will be written.
+; status_word_name
+: The name of the status word field in the process data description of ''pdin''.
+; control_word_name
+: The name of the control word field in the process data description of ''pdout''.
+; status_word_offset
+: Optionally a user may supply a status word offset in ''pdin''. This maybe usefull, if there's not process data description available. 
+; control_word_offset
+: Optionally a user may supply a control word offset in ''pdout''. This maybe usefull, if there's not process data description available. 
+
 
 [[Category:Robotkernel-5|Dsp402]]
