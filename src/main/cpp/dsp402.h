@@ -48,8 +48,10 @@ class dsp402_device :
         std::string name;
         std::string user_inputs_name;
         std::string user_outputs_name;
-        off_t state_word_offset;
-        off_t control_word_offset;
+        ssize_t status_word_offset;
+        ssize_t control_word_offset;
+        std::string status_word_name;
+        std::string control_word_name;
 
         //! de-/construction
         dsp402_device(dsp402 *parent, const YAML::Node& node);

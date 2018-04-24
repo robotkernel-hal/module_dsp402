@@ -9,7 +9,9 @@ This modules provides a simplified access to a dsp402 enabled device.
        - name: wheel_left
          pdin: ecat.slave_1.inputs.pd
          pdout: ecat.slave_1.outputs.pd
-         state_word_offset: 0
+         status_word_name: statusword
+         control_word_name: controlword
+         status_word_offset: 0
          control_word_offset: 0
      TODO
    power_up: op

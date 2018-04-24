@@ -82,8 +82,12 @@ dsp402_device::dsp402_device(dsp402 *parent, const YAML::Node& node) :
     name = get_as<string>(node, "name");
     user_inputs_name    = get_as<string>(node, "pdin");
     user_outputs_name   = get_as<string>(node, "pdout");
-    state_word_offset   = get_as<unsigned>(node, "state_word_offset", 0u);
-    control_word_offset = get_as<unsigned>(node, "control_word_offset", 0u);
+
+    status_word_offset  = get_as<unsigned>(node, "status_word_offset", -1u);
+    control_word_offset = get_as<unsigned>(node, "control_word_offset", -1u);
+
+    status_word_name    = get_as<std::string>(node, "status_word_name", "statusword");
+    control_word_name   = get_as<std::string>(node, "control_word_name", "controlword");
 }
 
 dsp402_device::~dsp402_device() {
@@ -109,7 +113,9 @@ std::string create_process_data_definition(const std::string& input_definition,
             std::transform(__ifield_name.begin(), __ifield_name.end(), __ifield_name.begin(), 
                     [](unsigned char c){ return std::tolower(c); });
 
-            if (__ifield_name == field_name) {
+            if (
+                    ((field_offset != -1) && (__ifield_name == field_name)) ||
+                    (field_offset == local_offset)) {
                 field_offset = local_offset;
 
                 emitter << YAML::Key << "uint8_t" << YAML::Value << "power";
@@ -146,7 +152,7 @@ void dsp402_device::open() {
     off_t inputs_length;
     std::string inputs_def = create_process_data_definition(
             user_inputs.pd->process_data_definition, inputs_length, 
-            "statusword", state_word_offset);
+            status_word_name, status_word_offset);
     inputs.trigger       = make_shared<trigger>(parent->name, name + ".inputs");
     inputs.pd            = make_shared<triple_buffer>(inputs_length,
             parent->name, name + ".inputs", inputs_def, inputs.trigger->id());
@@ -155,7 +161,7 @@ void dsp402_device::open() {
     off_t outputs_length;
     std::string outputs_def = create_process_data_definition(
             user_outputs.pd->process_data_definition, outputs_length, 
-            "controlword", control_word_offset);
+            control_word_name, control_word_offset);
     outputs.trigger      = make_shared<trigger>(parent->name, name + ".outputs");
     outputs.pd           = make_shared<triple_buffer>(outputs_length,
             parent->name, name + ".outputs", outputs_def, outputs.trigger->id());
@@ -185,7 +191,7 @@ u8  : ModeOfOperationDisplay        u8  : ModeOfOperationDisplay
 u8  : Padding                       u8  : Padding
 ....
 
-state_word_offset = 0
+status_word_offset = 0
 
 
 OUTPUTS (our own device)        ->  USER_OUTPUTS (to device)
@@ -210,14 +216,14 @@ void dsp402_device::tick() {
 
     control_t inputs_control, outputs_control;
 
-    if (state_word_offset > 0) 
-        memcpy(&inputs_buf[0], &user_inputs_buf[0], state_word_offset + 2); // copy with state word
+    if (status_word_offset > 0) 
+        memcpy(&inputs_buf[0], &user_inputs_buf[0], status_word_offset + 2); // copy with state word
     if (control_word_offset > 0)
         memcpy(&user_outputs_buf[0], &outputs_buf[0], control_word_offset);
 
     memcpy(&outputs_control, &outputs_buf[control_word_offset + 2], sizeof(control_t));
 
-    uint16_t status_word  = *(uint16_t *)&user_inputs_buf[state_word_offset];
+    uint16_t status_word  = *(uint16_t *)&user_inputs_buf[status_word_offset];
     uint16_t control_word = *(uint16_t *)&outputs_buf[control_word_offset];
 
     switch (status_word & STATUS_MASK) {
@@ -246,9 +252,9 @@ void dsp402_device::tick() {
     }
 
     // inputs
-    memcpy(&inputs_buf[state_word_offset + 2], &inputs_control, sizeof(control_t));
-    memcpy(&inputs_buf[state_word_offset + 2 + sizeof(control_t)],
-            &user_inputs_buf[state_word_offset] + 2, user_inputs.pd->length - state_word_offset - 2); 
+    memcpy(&inputs_buf[status_word_offset + 2], &inputs_control, sizeof(control_t));
+    memcpy(&inputs_buf[status_word_offset + 2 + sizeof(control_t)],
+            &user_inputs_buf[status_word_offset] + 2, user_inputs.pd->length - status_word_offset - 2); 
     inputs.pd->push(inputs.hash);
 
     // outputs
