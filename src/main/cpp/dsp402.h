@@ -48,8 +48,8 @@ class dsp402_device :
         std::string name;
         std::string user_inputs_name;
         std::string user_outputs_name;
-        ssize_t status_word_offset;
-        ssize_t control_word_offset;
+        off_t status_word_offset;
+        off_t control_word_offset;
         std::string status_word_name;
         std::string control_word_name;
 
