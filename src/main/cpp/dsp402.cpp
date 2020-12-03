@@ -83,6 +83,9 @@ dsp402_device::dsp402_device(dsp402 *parent, const YAML::Node& node) :
     user_inputs_name    = get_as<string>(node, "pdin");
     user_outputs_name   = get_as<string>(node, "pdout");
 
+    user_inputs_trigger_name  = get_as<string>(node, "pdin_trigger", "");
+    user_outputs_trigger_name = get_as<string>(node, "pdout_trigger", "");
+
     status_word_offset  = get_as<unsigned>(node, "status_word_offset", -1u);
     control_word_offset = get_as<unsigned>(node, "control_word_offset", -1u);
 
@@ -142,11 +145,21 @@ void dsp402_device::open() {
     
     user_inputs.pd       = k.get_process_data(user_inputs_name);
     user_inputs.hash     = user_inputs.pd->set_consumer(shared_from_this());
-    user_inputs.trigger  = k.get_trigger(user_inputs.pd->clk_device);
+    
+    if (user_inputs_trigger_name == "") {
+        user_inputs_trigger_name = user_inputs.pd->clk_device;
+    }
+
+    user_inputs.trigger  = k.get_trigger(user_inputs_trigger_name);
     
     user_outputs.pd      = k.get_process_data(user_outputs_name);
     user_outputs.hash    = user_outputs.pd->set_provider(shared_from_this());
-    user_outputs.trigger = k.get_trigger(user_outputs.pd->clk_device);
+    
+    if (user_outputs_trigger_name == "") {
+        user_outputs_trigger_name = user_outputs.pd->clk_device;
+    }
+
+    user_outputs.trigger = k.get_trigger(user_outputs_trigger_name);
 
 
     off_t inputs_length;
