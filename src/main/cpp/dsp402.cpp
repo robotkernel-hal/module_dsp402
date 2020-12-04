@@ -159,8 +159,9 @@ void dsp402_device::open() {
         user_outputs_trigger_name = user_outputs.pd->clk_device;
     }
 
-    user_outputs.trigger = k.get_trigger(user_outputs_trigger_name);
-
+    if (user_outputs_trigger_name != "") {
+        user_outputs.trigger = k.get_trigger(user_outputs_trigger_name);
+    }
 
     off_t inputs_length;
     std::string inputs_def = create_process_data_definition(
@@ -170,6 +171,9 @@ void dsp402_device::open() {
     inputs.pd            = make_shared<triple_buffer>(inputs_length,
             parent->name, name + ".inputs", inputs_def, inputs.trigger->id());
     inputs.hash          = inputs.pd->set_provider(shared_from_this());
+
+    k.add_device(inputs.trigger);
+    k.add_device(inputs.pd);
 
     off_t outputs_length;
     std::string outputs_def = create_process_data_definition(
@@ -181,6 +185,9 @@ void dsp402_device::open() {
     outputs.hash         = outputs.pd->set_consumer(shared_from_this());
 
     user_inputs.trigger->add_trigger(shared_from_this());
+
+    k.add_device(outputs.trigger);
+    k.add_device(outputs.pd);
 }
 
 void dsp402_device::close() {
@@ -189,6 +196,16 @@ void dsp402_device::close() {
         user_inputs.trigger = nullptr;
     }
 
+    kernel& k = *kernel::get_instance();
+    k.remove_device(outputs.pd);
+    outputs.pd = nullptr;
+    k.remove_device(outputs.trigger);
+    outputs.trigger = nullptr;
+
+    k.remove_device(inputs.pd);
+    inputs.pd = nullptr;
+    k.remove_device(inputs.trigger);
+    inputs.trigger = nullptr;
     
     
 }
