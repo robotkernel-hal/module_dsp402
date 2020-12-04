@@ -86,8 +86,8 @@ dsp402_device::dsp402_device(dsp402 *parent, const YAML::Node& node) :
     user_inputs_trigger_name  = get_as<string>(node, "pdin_trigger", "");
     user_outputs_trigger_name = get_as<string>(node, "pdout_trigger", "");
 
-    status_word_offset  = get_as<unsigned>(node, "status_word_offset", -1u);
-    control_word_offset = get_as<unsigned>(node, "control_word_offset", -1u);
+    status_word_offset  = get_as<unsigned>(node, "status_word_offset", 0u);
+    control_word_offset = get_as<unsigned>(node, "control_word_offset", 0u);
 
     status_word_name    = get_as<std::string>(node, "status_word_name", "statusword");
     control_word_name   = get_as<std::string>(node, "control_word_name", "controlword");
@@ -116,22 +116,25 @@ std::string create_process_data_definition(const std::string& input_definition,
             std::transform(__ifield_name.begin(), __ifield_name.end(), __ifield_name.begin(), 
                     [](unsigned char c){ return std::tolower(c); });
 
+
             if (
-                    ((field_offset != -1) && (__ifield_name == field_name)) ||
-                    (field_offset == local_offset)) {
+                    (__ifield_name == field_name) ||
+                    ((field_name == "") && (field_offset == local_offset))) {
                 field_offset = local_offset;
 
-                emitter << YAML::Key << "uint8_t" << YAML::Value << "power";
+                emitter << YAML::Key << __datatype_name << YAML::Value << __field_name;
+                emitter << YAML::Key << "uint8_t" << YAML::Value << "dsp402_power";
                 emitter << YAML::EndMap << YAML::BeginMap;
-                emitter << YAML::Key << "uint8_t" << YAML::Value << "brakes";
+                emitter << YAML::Key << "uint8_t" << YAML::Value << "dsp402_brakes";
                 emitter << YAML::EndMap << YAML::BeginMap;
-                emitter << YAML::Key << "uint8_t" << YAML::Value << "fault";
+                emitter << YAML::Key << "uint8_t" << YAML::Value << "dsp402_fault";
                 
+                local_offset += datatype_to_size[__datatype_name];
                 local_offset += sizeof(dsp402_device::control_t);
+            } else {
+                emitter << YAML::Key << __datatype_name << YAML::Value << __field_name;
+                local_offset += datatype_to_size[__datatype_name];
             }
-
-            emitter << YAML::Key << __datatype_name << YAML::Value << __field_name;
-            local_offset += datatype_to_size[__datatype_name];
         }
 
         emitter << YAML::EndMap;
@@ -151,7 +154,7 @@ void dsp402_device::open() {
     }
 
     user_inputs.trigger  = k.get_trigger(user_inputs_trigger_name);
-    
+
     user_outputs.pd      = k.get_process_data(user_outputs_name);
     user_outputs.hash    = user_outputs.pd->set_provider(shared_from_this());
     
@@ -159,11 +162,12 @@ void dsp402_device::open() {
         user_outputs_trigger_name = user_outputs.pd->clk_device;
     }
 
+    user_inputs.trigger  = k.get_trigger(user_inputs_trigger_name);
     if (user_outputs_trigger_name != "") {
         user_outputs.trigger = k.get_trigger(user_outputs_trigger_name);
     }
 
-    off_t inputs_length;
+    off_t inputs_length = 0;
     std::string inputs_def = create_process_data_definition(
             user_inputs.pd->process_data_definition, inputs_length, 
             status_word_name, status_word_offset);
@@ -175,7 +179,7 @@ void dsp402_device::open() {
     k.add_device(inputs.trigger);
     k.add_device(inputs.pd);
 
-    off_t outputs_length;
+    off_t outputs_length = 0;
     std::string outputs_def = create_process_data_definition(
             user_outputs.pd->process_data_definition, outputs_length, 
             control_word_name, control_word_offset);
@@ -258,17 +262,26 @@ void dsp402_device::tick() {
 
     switch (status_word & STATUS_MASK) {
         default: 
+            inputs_control.fault = 0;;
             inputs_control.power = 0;
+            inputs_control.brakes = 1;
             break;
         case STATUS_READY_TO_SWITCH_ON: // 0x0001
+            inputs_control.fault = 0;;
+            inputs_control.power = 0;
+            inputs_control.brakes = 1;
             control_word = (control_word & ~CONTROL_MASK) | CONTROL_SHUTDOWN;
             break;
         case STATUS_SWITCH_ON:          // 0x0003
+            inputs_control.fault = 0;;
+            inputs_control.power = 0;
+            inputs_control.brakes = 1;
             control_word = (control_word & ~CONTROL_MASK) | CONTROL_SWITCH_ON;
             break;
         case STATUS_OPERATION_ENABLED:  // 0x0007
+            inputs_control.fault = 0;;
             inputs_control.power = 1;
-            inputs_control.fault = 0;
+            inputs_control.brakes = 0;
 
             if (outputs_control.power == 1)
                 control_word = (control_word & ~CONTROL_MASK) | CONTROL_ENABLE_OPERATION;
@@ -278,14 +291,17 @@ void dsp402_device::tick() {
         case STATUS_FAULT:
         case STATUS_FAULT_REACTION_ACTIVE:
             inputs_control.fault = status_word & STATUS_MASK;
+            inputs_control.power = 0;
+            inputs_control.brakes = 1;
             break;
     }
 
     // inputs
     memcpy(&inputs_buf[status_word_offset + 2], &inputs_control, sizeof(control_t));
     memcpy(&inputs_buf[status_word_offset + 2 + sizeof(control_t)],
-            &user_inputs_buf[status_word_offset] + 2, user_inputs.pd->length - status_word_offset - 2); 
+            &user_inputs_buf[status_word_offset + 2], user_inputs.pd->length - status_word_offset - 2); 
     inputs.pd->push(inputs.hash);
+    inputs.trigger->trigger_modules();
 
     // outputs
     memcpy(&user_outputs_buf[control_word_offset], &control_word, sizeof(control_word));
