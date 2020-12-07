@@ -291,6 +291,12 @@ void dsp402_device::tick() {
             break;
     }
 
+    if (inputs_control.fault) {
+	    if (inputs_control.fault == 1) {
+		    control_word |= CONTROL_FAULT_RESET;
+	    }
+    }
+
     // inputs
     memcpy(&inputs_buf[status_word_offset + 2], &inputs_control, sizeof(control_t));
     memcpy(&inputs_buf[status_word_offset + 2 + sizeof(control_t)],
@@ -301,8 +307,8 @@ void dsp402_device::tick() {
     // outputs
     memcpy(&user_outputs_buf[control_word_offset], &control_word, sizeof(control_word));
     memcpy(&user_outputs_buf[control_word_offset + sizeof(control_word)], 
-            &outputs_buf[control_word_offset + sizeof(control_t)], 
-            outputs.pd->length - control_word_offset - sizeof(control_t));
+            &outputs_buf[control_word_offset + sizeof(control_word) + sizeof(control_t)], 
+            user_outputs.pd->length - control_word_offset - sizeof(control_word));
     user_outputs.pd->push(user_outputs.hash);
 
     if (user_outputs.trigger != nullptr) {
