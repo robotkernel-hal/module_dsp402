@@ -96,7 +96,7 @@ dsp402_device::dsp402_device(dsp402 *parent, const YAML::Node& node) :
 dsp402_device::~dsp402_device() {
 }
 
-std::string create_process_data_definition(const std::string& input_definition, 
+std::string create_process_data_definition(const std::string& type_prefix, const std::string& input_definition, 
         off_t& local_offset, std::string field_name, off_t& field_offset) {
     std::transform(field_name.begin(), field_name.end(), field_name.begin(),                     
             [](unsigned char c){ return std::tolower(c); });
@@ -122,7 +122,9 @@ std::string create_process_data_definition(const std::string& input_definition,
                     ((field_name == "") && (field_offset == local_offset))) {
                 field_offset = local_offset;
 
-                emitter << YAML::Key << __datatype_name << YAML::Value << __field_name;
+                emitter << YAML::Key << __datatype_name << YAML::Value << 
+                    format_string("%s.%s", type_prefix.c_str(), __field_name.c_str());
+                emitter << YAML::EndMap << YAML::BeginMap;
                 emitter << YAML::Key << "uint8_t" << YAML::Value << "dsp402_power";
                 emitter << YAML::EndMap << YAML::BeginMap;
                 emitter << YAML::Key << "uint8_t" << YAML::Value << "dsp402_brakes";
@@ -132,7 +134,8 @@ std::string create_process_data_definition(const std::string& input_definition,
                 local_offset += datatype_to_size[__datatype_name];
                 local_offset += sizeof(dsp402_device::control_t);
             } else {
-                emitter << YAML::Key << __datatype_name << YAML::Value << __field_name;
+                emitter << YAML::Key << __datatype_name << YAML::Value << 
+                    format_string("%s.%s", type_prefix.c_str(), __field_name.c_str());
                 local_offset += datatype_to_size[__datatype_name];
             }
         }
@@ -168,7 +171,7 @@ void dsp402_device::open() {
     }
 
     off_t inputs_length = 0;
-    std::string inputs_def = create_process_data_definition(
+    std::string inputs_def = create_process_data_definition(user_inputs.pd->id(),
             user_inputs.pd->process_data_definition, inputs_length, 
             status_word_name, status_word_offset);
     inputs.trigger       = make_shared<trigger>(parent->name, name + ".inputs");
@@ -180,7 +183,7 @@ void dsp402_device::open() {
     k.add_device(inputs.pd);
 
     off_t outputs_length = 0;
-    std::string outputs_def = create_process_data_definition(
+    std::string outputs_def = create_process_data_definition(user_outputs.pd->id(),
             user_outputs.pd->process_data_definition, outputs_length, 
             control_word_name, control_word_offset);
     outputs.trigger      = make_shared<trigger>(parent->name, name + ".outputs");
