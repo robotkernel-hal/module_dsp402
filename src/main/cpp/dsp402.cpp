@@ -309,6 +309,10 @@ void dsp402_device::tick() {
             &outputs_buf[control_word_offset + sizeof(control_t)], 
             outputs.pd->length - control_word_offset - sizeof(control_t));
     user_outputs.pd->push(user_outputs.hash);
+
+    if (user_outputs.trigger != nullptr) {
+        user_outputs.trigger->trigger_modules();
+    }
 }
 
 //! construction
