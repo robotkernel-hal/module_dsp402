@@ -2,7 +2,7 @@
 
 # DSP402 control state machine module
 
-'''yaml
+```yaml
 - name: dsp402
   so_file: libmodule_dsp402.so
   config:
@@ -16,4 +16,4 @@
       control_word_name: Controlword
   power_up: op
   depends: [ ecat ]
-'''
+```
