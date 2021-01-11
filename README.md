@@ -1,5 +1,8 @@
 # module_dsp402
 
+This module implements the CiA DSP 402 state machine. Therefore it takes an input and output process data with the statusword and the controlword and exports new process data to control the state machine in an easier way.
+
+
 # DSP402 control state machine module
 
 ```yaml
