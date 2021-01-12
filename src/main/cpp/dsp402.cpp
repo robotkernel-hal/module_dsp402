@@ -324,10 +324,24 @@ void dsp402_device::tick() {
 dsp402::dsp402(const char *name, const YAML::Node& node) :
     module_base("module_dsp402", name, node) 
 {
+    this->config = YAML::Clone(node);
     set_state(module_state_init);
+}
 
-    for (const auto& dev : node["devices"])
-        devices.push_back(make_shared<dsp402_device>(this, dev)); 
+//! init func
+void dsp402::init() {
+    if (config["devices"]) {
+        // backwards compability
+        for (const auto& dev : config["devices"])
+            devices.push_back(make_shared<dsp402_device>(this, dev)); 
+    }
+
+    std::list<YAML::Node> device_instances_list;
+    parse_templates(config, device_instances_list);
+
+    for (const auto& inst : device_instances_list) {
+        devices.push_back(make_shared<dsp402_device>(this, inst)); 
+    }
 }
 
 //! destruction

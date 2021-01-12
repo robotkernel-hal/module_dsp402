@@ -88,6 +88,9 @@ class dsp402 :
     public std::enable_shared_from_this<dsp402>,
     public robotkernel::module_base
 {
+    private:
+        YAML::Node config;
+
     public:
         //! de-/construction
         /*
@@ -96,6 +99,9 @@ class dsp402 :
          */
         dsp402(const char *name, const YAML::Node& node);
         ~dsp402();
+
+        //! init func
+        void init();
 
         //! set fts state
         /*!
