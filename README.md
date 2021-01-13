@@ -26,14 +26,14 @@ This module implements the CiA DSP 402 state machine. Therefore it takes an inpu
   so_file: libmodule_dsp402.so
   config:
     classes:
-    - class_name: my_axis
-      name: ($axis_name)
-      pdin: ($inputs_name).pd
-      pdin_trigger: ($inputs_name).trigger
-      pdout: ($outputs_name).pd
-      pdout_trigger: ($outputs_name).trigger
-      status_word_name: Statusword
-      control_word_name: Controlword
+      my_axis:
+        name: ($axis_name)
+        pdin: ($inputs_name).pd
+        pdin_trigger: ($inputs_name).trigger
+        pdout: ($outputs_name).pd
+        pdout_trigger: ($outputs_name).trigger
+        status_word_name: Statusword
+        control_word_name: Controlword
     instances:
     - { use_class: my_axis, axis_name: axis_1, inputs_name: ecat.slave_1.inputs, outputs_name: ecat.slave_1.outputs }
     - { use_class: my_axis, axis_name: axis_2, inputs_name: ecat.slave_2.inputs, outputs_name: ecat.slave_2.outputs }
