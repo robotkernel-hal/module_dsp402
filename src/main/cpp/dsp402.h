@@ -29,6 +29,9 @@
 #include <string>
 #include "yaml-cpp/yaml.h"
 
+namespace module_dsp402 { class dsp402_device; };
+YAML::Emitter& operator<<(YAML::Emitter& out, const module_dsp402::dsp402_device& dev);
+
 namespace module_dsp402 {
 #ifdef EMACS
 }
@@ -54,6 +57,8 @@ class dsp402_device :
         off_t control_word_offset;
         std::string status_word_name;
         std::string control_word_name;
+
+        YAML::Node config;
 
         //! de-/construction
         dsp402_device(dsp402 *parent, const YAML::Node& node);
