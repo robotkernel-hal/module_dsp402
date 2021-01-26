@@ -269,32 +269,43 @@ void dsp402_device::tick() {
         default: 
             inputs_control.power = 0;
             inputs_control.brakes = 1;
-            break;
-        case STATUS_READY_TO_SWITCH_ON: // 0x0001
+            control_word = (control_word & ~CONTROL_MASK);
+        case STATUS_SWITCH_ON_DISABLED:
             inputs_control.power = 0;
             inputs_control.brakes = 1;
             control_word = (control_word & ~CONTROL_MASK) | CONTROL_SHUTDOWN;
             break;
-        case STATUS_SWITCH_ON:          // 0x0003
+        case STATUS_READY_TO_SWITCH_ON: // 0x0001
             inputs_control.power = 0;
             inputs_control.brakes = 1;
             control_word = (control_word & ~CONTROL_MASK) | CONTROL_SWITCH_ON;
+            break;
+        case STATUS_SWITCH_ON:          // 0x0003
+            inputs_control.power = 0;
+            inputs_control.brakes = 1;
+            
+            if (outputs_control.power == 1) {
+                control_word = (control_word & ~CONTROL_MASK) | CONTROL_ENABLE_OPERATION;
+            } else {
+                control_word = (control_word & ~CONTROL_MASK) | CONTROL_SWITCH_ON;
+            }
             break;
         case STATUS_OPERATION_ENABLED:  // 0x0007
             inputs_control.power = 1;
             inputs_control.brakes = 0;
 
-            if (outputs_control.power == 1)
+            if (outputs_control.power == 1) {
                 control_word = (control_word & ~CONTROL_MASK) | CONTROL_ENABLE_OPERATION;
-            else 
+            } else {
                 control_word = (control_word & ~CONTROL_MASK) | CONTROL_SWITCH_ON;
+            }
             break;
     }
 
     if (inputs_control.fault) {
-	    if (inputs_control.fault == 1) {
-		    control_word |= CONTROL_FAULT_RESET;
-	    }
+            if (inputs_control.fault == 1) {
+                    control_word |= CONTROL_FAULT_RESET;
+            }
     }
 
     // inputs
