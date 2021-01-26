@@ -79,6 +79,8 @@ static std::map<std::string, size_t> datatype_to_size = {
 dsp402_device::dsp402_device(dsp402 *parent, const YAML::Node& node) :
     pd_consumer(parent->name), pd_provider(parent->name), parent(parent)
 {
+    config = YAML::Clone(node);
+
     name = get_as<string>(node, "name");
     user_inputs_name    = get_as<string>(node, "pdin");
     user_outputs_name   = get_as<string>(node, "pdout");
@@ -335,10 +337,30 @@ void dsp402_device::tick() {
 dsp402::dsp402(const char *name, const YAML::Node& node) :
     module_base("module_dsp402", name, node) 
 {
+    this->config = YAML::Clone(node);
     set_state(module_state_init);
+}
 
-    for (const auto& dev : node["devices"])
-        devices.push_back(make_shared<dsp402_device>(this, dev)); 
+//! init func
+void dsp402::init() {
+    if (config["devices"]) {
+        // backwards compability
+        for (const auto& dev : config["devices"])
+            devices.push_back(make_shared<dsp402_device>(this, dev)); 
+    }
+
+    std::list<YAML::Node> device_instances_list;
+    robotkernel::parse_templates(config, device_instances_list);
+
+    for (const auto& inst : device_instances_list) {
+        devices.push_back(make_shared<dsp402_device>(this, inst)); 
+    }
+
+    for (const auto& dev : devices) {
+        YAML::Emitter emitter;
+        emitter << *dev;
+        log(verbose, "got device: \n%s\n", emitter.c_str());
+    }
 }
 
 //! destruction
@@ -392,8 +414,13 @@ int dsp402::set_state(module_state_t state) {
         case preop_2_op:
         case preop_2_safeop:
             // ====> start receiving measurements
-            for (const auto& dev : devices)
+            for (const auto& dev : devices) {
                 dev->open();
+
+                YAML::Emitter emitter;
+                emitter << *dev;
+                log(verbose, "opened device: \n%s\n", emitter.c_str());
+            }
 
             if (    (transition == init_2_safeop) ||
                     (transition == preop_2_safeop))
@@ -413,4 +440,20 @@ int dsp402::set_state(module_state_t state) {
 
     return (this->state = state);
 }
+
+YAML::Emitter& operator<<(YAML::Emitter& out, const module_dsp402::dsp402_device& dev) {
+    out << YAML::BeginMap;
+    out << YAML::Key << "name" << YAML::Value << dev.name;
+    out << YAML::Key << "pdin" << YAML::Value << dev.user_inputs_name;
+    out << YAML::Key << "pdout" << YAML::Value << dev.user_outputs_name;
+    out << YAML::Key << "pdin_trigger" << YAML::Value << dev.user_inputs_trigger_name;
+    out << YAML::Key << "pdout_trigger" << YAML::Value << dev.user_outputs_trigger_name;
+    out << YAML::Key << "status_word_offset" << YAML::Value << dev.status_word_offset;
+    out << YAML::Key << "control_word_offset" << YAML::Value << dev.control_word_offset;
+    out << YAML::Key << "status_word_name" << YAML::Value << dev.status_word_name;
+    out << YAML::Key << "control_word_name" << YAML::Value << dev.control_word_name;
+    out << YAML::EndMap;
+
+    return out;
+};
 
