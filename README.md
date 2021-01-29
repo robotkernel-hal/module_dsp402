@@ -2,7 +2,6 @@
 
 This module implements the CiA DSP 402 state machine. Therefore it takes an input and output process data with the statusword and the controlword and exports new process data to control the state machine in an easier way.
 
-
 # DSP402 control state machine module
 
 ```yaml
@@ -40,4 +39,42 @@ This module implements the CiA DSP 402 state machine. Therefore it takes an inpu
     - { use_class: my_axis, axis_name: axis_3, inputs_name: ecat.slave_3.inputs, outputs_name: ecat.slave_3.outputs }
   power_up: op
   depends: [ ecat ]
+```
+
+```yaml
+# Configuration file for PULSAR DSP402 module.
+#
+# vi: set ft=yaml nowrap:
+# -*- mode: yaml -*-
+
+#########################################################
+# logging settings
+
+# Standard robotkernel loglevel.
+loglevel: info
+
+#########################################################
+# devices
+devices:
+- 
+  # Local instance Name
+  name: axis_0
+  
+  # Name of the input process data
+  pdin: ecat.slave_1.inputs.pd
+
+  # Trigger of the input process data
+  pdin_trigger: ecat.slave_1.inputs.trigger
+
+  # Name of the output process data
+  pdout: ecat.slave_1.outputs.pd
+
+  # Trigger of the output process data
+  pdout_trigger: ecat.slave_1.outputs.trigger
+
+  # Name of the Status Word in <pdin>
+  status_word_name: Statusword
+
+  # Name of the Control Word in <pdout>
+  control_word_name: Controlword
 ```
