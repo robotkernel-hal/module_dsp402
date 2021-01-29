@@ -193,6 +193,7 @@ void dsp402_device::open() {
             parent->name, name + ".outputs", outputs_def, outputs.trigger->id());
     outputs.hash         = outputs.pd->set_consumer(shared_from_this());
 
+    parent->log(info, "%s: adding trigger to %s\n", name.c_str(), user_inputs.trigger->id().c_str());
     user_inputs.trigger->add_trigger(shared_from_this());
 
     k.add_device(outputs.trigger);
@@ -201,6 +202,7 @@ void dsp402_device::open() {
 
 void dsp402_device::close() {
     if (user_inputs.trigger) {
+        parent->log(info, "%s: removing trigger to %s\n", name.c_str(), user_inputs.trigger->id().c_str());
         user_inputs.trigger->remove_trigger(shared_from_this());
         user_inputs.trigger = nullptr;
     }
