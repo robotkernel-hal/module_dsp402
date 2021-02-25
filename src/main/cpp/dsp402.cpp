@@ -307,7 +307,7 @@ void dsp402_device::tick() {
     }
 
     if (inputs_control.fault) {
-            if (inputs_control.fault == 1) {
+            if (outputs_control.fault == 1) {
                     control_word |= CONTROL_FAULT_RESET;
             }
     }
