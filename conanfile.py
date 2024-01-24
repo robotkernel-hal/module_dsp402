@@ -1,12 +1,10 @@
-from conans import tools, python_requires
+from conan import ConanFile
 
-base = python_requires("conan_template/[~=5]@robotkernel/stable")
+class MainProject(ConanFile):
+    python_requires = "conan_template/[^5.0.6]@robotkernel/stable"
+    python_requires_extend = "conan_template.RobotkernelConanFile"
 
-class MainProject(base.RobotkernelConanFile):
     name = "module_dsp402"
-    description = "todo add this"
-    exports_sources = ["*", "!.gitignore"] + ["!%s" % x for x in tools.Git().excluded_files()]
-
-    def requirements(self):
-        self.requires("robotkernel/[>=5.0.21]@robotkernel/stable")
-
+    description = "Handling of CiA DSP 402 drive profile."
+    exports_sources = ["*", "!.gitignore"]
+    requires = ["robotkernel/[~=5]@robotkernel/stable", ] 
