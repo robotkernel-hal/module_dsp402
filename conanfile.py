@@ -7,4 +7,4 @@ class MainProject(ConanFile):
     name = "module_dsp402"
     description = "Handling of CiA DSP 402 drive profile."
     exports_sources = ["*", "!.gitignore"]
-    requires = ["robotkernel/[~=5]@robotkernel/stable", ] 
+    requires = ["robotkernel/[~=6]@robotkernel/snapshot", ] 
