@@ -199,6 +199,14 @@ void dsp402_device::close() {
 
     k.remove_device(inputs.pd);
     inputs.pd = nullptr;
+
+    user_inputs.pd->reset_consumer(user_inputs.hash);
+    user_inputs.pd = nullptr;
+    user_inputs.hash = 0;
+
+    user_outputs.pd->reset_provider(user_outputs.hash);
+    user_outputs.pd = nullptr;
+    user_outputs.hash = 0;
 }
 
 
