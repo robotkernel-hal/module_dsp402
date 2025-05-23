@@ -39,11 +39,21 @@ namespace module_dsp402 {
 
 class dsp402;
 
+
+class trigger_cb : public robotkernel::trigger_base {
+    public:
+        std::function<void(void)> cb;
+
+        trigger_cb(std::function<void(void)> cb) : cb(cb) {}
+
+        //! trigger function
+        void tick() { cb(); }
+};
+
 class dsp402_device : 
     public std::enable_shared_from_this<dsp402_device>,
     public robotkernel::pd_consumer,
-    public robotkernel::pd_provider, 
-    public robotkernel::trigger_base
+    public robotkernel::pd_provider
 {
     public:
         dsp402 *parent;
@@ -51,12 +61,11 @@ class dsp402_device :
         std::string name;
         std::string user_inputs_name;
         std::string user_outputs_name;
-        std::string user_inputs_trigger_name;
-        std::string user_outputs_trigger_name;
         off_t status_word_offset;
         off_t control_word_offset;
         std::string status_word_name;
         std::string control_word_name;
+        bool prefix_entries = true;
 
         YAML::Node config;
 
@@ -65,7 +74,7 @@ class dsp402_device :
         ~dsp402_device();
 
         typedef struct {
-            robotkernel::sp_trigger_t trigger;
+            std::shared_ptr<trigger_cb> trigger;
             robotkernel::sp_process_data_t pd;
             size_t hash;
         } pd_t;
@@ -86,7 +95,8 @@ class dsp402_device :
         void close();
         
         //! trigger function
-        void tick();
+        void tick_inputs();
+        void tick_outputs_update();
 };
 
 class dsp402 : 

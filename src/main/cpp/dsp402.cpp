@@ -85,14 +85,13 @@ dsp402_device::dsp402_device(dsp402 *parent, const YAML::Node& node) :
     user_inputs_name    = get_as<string>(node, "pdin");
     user_outputs_name   = get_as<string>(node, "pdout");
 
-    user_inputs_trigger_name  = get_as<string>(node, "pdin_trigger", "");
-    user_outputs_trigger_name = get_as<string>(node, "pdout_trigger", "");
-
     status_word_offset  = get_as<unsigned>(node, "status_word_offset", 0u);
     control_word_offset = get_as<unsigned>(node, "control_word_offset", 0u);
 
     status_word_name    = get_as<std::string>(node, "status_word_name", "statusword");
     control_word_name   = get_as<std::string>(node, "control_word_name", "controlword");
+
+    prefix_entries      = get_as<bool>(node, "prefix_entries", true);
 }
 
 dsp402_device::~dsp402_device() {
@@ -136,8 +135,12 @@ std::string create_process_data_definition(const std::string& type_prefix, const
                 local_offset += datatype_to_size[__datatype_name];
                 local_offset += sizeof(dsp402_device::control_t);
             } else {
-                emitter << YAML::Key << __datatype_name << YAML::Value << 
-                    format_string("%s.%s", type_prefix.c_str(), __field_name.c_str());
+                if (type_prefix != "") {
+                    emitter << YAML::Key << __datatype_name << YAML::Value << 
+                        format_string("%s.%s", type_prefix.c_str(), __field_name.c_str());
+                } else {
+                    emitter << YAML::Key << __datatype_name << YAML::Value <<  __field_name.c_str();
+                }
                 local_offset += datatype_to_size[__datatype_name];
             }
         }
@@ -154,71 +157,56 @@ void dsp402_device::open() {
     user_inputs.pd       = k.get_process_data(user_inputs_name);
     user_inputs.hash     = user_inputs.pd->set_consumer(shared_from_this());
     
-    if (user_inputs_trigger_name == "") {
-        user_inputs_trigger_name = user_inputs.pd->clk_device;
-    }
-
-    user_inputs.trigger  = k.get_trigger(user_inputs_trigger_name);
-
     user_outputs.pd      = k.get_process_data(user_outputs_name);
     user_outputs.hash    = user_outputs.pd->set_provider(shared_from_this());
-    
-    if (user_outputs_trigger_name == "") {
-        user_outputs_trigger_name = user_outputs.pd->clk_device;
-    }
-
-    user_inputs.trigger  = k.get_trigger(user_inputs_trigger_name);
-    if (user_outputs_trigger_name != "") {
-        user_outputs.trigger = k.get_trigger(user_outputs_trigger_name);
-    }
 
     off_t inputs_length = 0;
-    std::string inputs_def = create_process_data_definition(user_inputs.pd->id(),
+    std::string inputs_def = create_process_data_definition(prefix_entries ? user_inputs.pd->id() : "",
             user_inputs.pd->process_data_definition, inputs_length, 
             status_word_name, status_word_offset);
-    inputs.trigger       = make_shared<trigger>(parent->name, name + ".inputs");
-    inputs.pd            = make_shared<triple_buffer>(inputs_length,
-            parent->name, name + ".inputs", inputs_def, inputs.trigger->id());
+    inputs.trigger       = make_shared<trigger_cb>(std::bind(&dsp402_device::tick_inputs, shared_from_this()));
+    inputs.pd            = make_shared<triple_buffer>(inputs_length, parent->name, name + ".inputs", inputs_def);
     inputs.hash          = inputs.pd->set_provider(shared_from_this());
-
-    k.add_device(inputs.trigger);
     k.add_device(inputs.pd);
 
     off_t outputs_length = 0;
-    std::string outputs_def = create_process_data_definition(user_outputs.pd->id(),
+    std::string outputs_def = create_process_data_definition(prefix_entries ? user_outputs.pd->id() : "",
             user_outputs.pd->process_data_definition, outputs_length, 
             control_word_name, control_word_offset);
-    outputs.trigger      = make_shared<trigger>(parent->name, name + ".outputs");
-    outputs.pd           = make_shared<triple_buffer>(outputs_length,
-            parent->name, name + ".outputs", outputs_def, outputs.trigger->id());
+    outputs.trigger      = make_shared<trigger_cb>(std::bind(&dsp402_device::tick_outputs_update, shared_from_this()));
+    outputs.pd           = make_shared<triple_buffer>(outputs_length, parent->name, name + ".outputs", outputs_def);
     outputs.hash         = outputs.pd->set_consumer(shared_from_this());
 
-    parent->log(info, "%s: adding trigger to %s\n", name.c_str(), user_inputs.trigger->id().c_str());
-    user_inputs.trigger->add_trigger(shared_from_this());
+    parent->log(info, "%s: adding trigger to %s\n", name.c_str(), user_inputs.pd->trigger_dev->id().c_str());
+    user_inputs.pd->trigger_dev->add_trigger(inputs.trigger);
+    outputs.pd->trigger_dev->add_trigger(outputs.trigger);
 
-    k.add_device(outputs.trigger);
     k.add_device(outputs.pd);
 }
 
 void dsp402_device::close() {
-    if (user_inputs.trigger) {
-        parent->log(info, "%s: removing trigger to %s\n", name.c_str(), user_inputs.trigger->id().c_str());
-        user_inputs.trigger->remove_trigger(shared_from_this());
-        user_inputs.trigger = nullptr;
-    }
+    parent->log(info, "%s: removing trigger to %s\n", name.c_str(), user_inputs.pd->trigger_dev->id().c_str());
+    user_inputs.pd->trigger_dev->remove_trigger(inputs.trigger);
+    inputs.trigger = nullptr;
+    
+    parent->log(info, "%s: removing trigger to %s\n", name.c_str(), outputs.pd->trigger_dev->id().c_str());
+    outputs.pd->trigger_dev->remove_trigger(outputs.trigger);
+    outputs.trigger = nullptr;
 
     kernel& k = *kernel::get_instance();
     k.remove_device(outputs.pd);
     outputs.pd = nullptr;
-    k.remove_device(outputs.trigger);
-    outputs.trigger = nullptr;
 
     k.remove_device(inputs.pd);
     inputs.pd = nullptr;
-    k.remove_device(inputs.trigger);
-    inputs.trigger = nullptr;
-    
-    
+
+    user_inputs.pd->reset_consumer(user_inputs.hash);
+    user_inputs.pd = nullptr;
+    user_inputs.hash = 0;
+
+    user_outputs.pd->reset_provider(user_outputs.hash);
+    user_outputs.pd = nullptr;
+    user_outputs.hash = 0;
 }
 
 
@@ -248,68 +236,30 @@ control_word_offset = 0
 
 */
 
-void dsp402_device::tick() {
+void dsp402_device::tick_inputs() {
     auto inputs_buf = inputs.pd->next(inputs.hash);
-    auto outputs_buf = outputs.pd->pop(outputs.hash);
-
     auto user_inputs_buf = user_inputs.pd->pop(user_inputs.hash);
-    auto user_outputs_buf = user_outputs.pd->next(user_outputs.hash);
 
-    control_t inputs_control, outputs_control;
+    control_t inputs_control;
 
     if (status_word_offset > 0) 
         memcpy(&inputs_buf[0], &user_inputs_buf[0], status_word_offset + 2); // copy with state word
-    if (control_word_offset > 0)
-        memcpy(&user_outputs_buf[0], &outputs_buf[0], control_word_offset);
-
-    memcpy(&outputs_control, &outputs_buf[control_word_offset + 2], sizeof(control_t));
 
     uint16_t status_word  = *(uint16_t *)&user_inputs_buf[status_word_offset];
-    uint16_t control_word = *(uint16_t *)&outputs_buf[control_word_offset];
-            
     inputs_control.fault = (status_word & STATUS_FAULT) == STATUS_FAULT ? 1 : 0;
 
     switch (status_word & STATUS_MASK) {
         default: 
-            inputs_control.power = 0;
-            inputs_control.brakes = 1;
-            control_word = (control_word & ~CONTROL_MASK);
         case STATUS_SWITCH_ON_DISABLED:
-            inputs_control.power = 0;
-            inputs_control.brakes = 1;
-            control_word = (control_word & ~CONTROL_MASK) | CONTROL_SHUTDOWN;
-            break;
         case STATUS_READY_TO_SWITCH_ON: // 0x0001
-            inputs_control.power = 0;
-            inputs_control.brakes = 1;
-            control_word = (control_word & ~CONTROL_MASK) | CONTROL_SWITCH_ON;
-            break;
         case STATUS_SWITCH_ON:          // 0x0003
             inputs_control.power = 0;
             inputs_control.brakes = 1;
-            
-            if (outputs_control.power == 1) {
-                control_word = (control_word & ~CONTROL_MASK) | CONTROL_ENABLE_OPERATION;
-            } else {
-                control_word = (control_word & ~CONTROL_MASK) | CONTROL_SWITCH_ON;
-            }
             break;
         case STATUS_OPERATION_ENABLED:  // 0x0007
             inputs_control.power = 1;
             inputs_control.brakes = 0;
-
-            if (outputs_control.power == 1) {
-                control_word = (control_word & ~CONTROL_MASK) | CONTROL_ENABLE_OPERATION;
-            } else {
-                control_word = (control_word & ~CONTROL_MASK) | CONTROL_SWITCH_ON;
-            }
             break;
-    }
-
-    if (inputs_control.fault) {
-            if (outputs_control.fault == 1) {
-                    control_word |= CONTROL_FAULT_RESET;
-            }
     }
 
     // inputs
@@ -317,7 +267,52 @@ void dsp402_device::tick() {
     memcpy(&inputs_buf[status_word_offset + 2 + sizeof(control_t)],
             &user_inputs_buf[status_word_offset + 2], user_inputs.pd->length - status_word_offset - 2); 
     inputs.pd->push(inputs.hash);
-    inputs.trigger->trigger_modules();
+}
+
+void dsp402_device::tick_outputs_update() {
+    auto outputs_buf = outputs.pd->pop(outputs.hash);
+
+    auto user_inputs_buf = user_inputs.pd->peek();
+    auto user_outputs_buf = user_outputs.pd->next(user_outputs.hash);
+
+    control_t &outputs_control = *(control_t *)&outputs_buf[control_word_offset + 2];
+
+    if (control_word_offset > 0)
+        memcpy(&user_outputs_buf[0], &outputs_buf[0], control_word_offset);
+
+    uint16_t status_word  = *(uint16_t *)&user_inputs_buf[status_word_offset];
+    uint16_t control_word = *(uint16_t *)&outputs_buf[control_word_offset];
+            
+    switch (status_word & STATUS_MASK) {
+        default: 
+            control_word = (control_word & ~CONTROL_MASK);
+        case STATUS_SWITCH_ON_DISABLED:
+            control_word = (control_word & ~CONTROL_MASK) | CONTROL_SHUTDOWN;
+            break;
+        case STATUS_READY_TO_SWITCH_ON: // 0x0001
+            control_word = (control_word & ~CONTROL_MASK) | CONTROL_SWITCH_ON;
+            break;
+        case STATUS_SWITCH_ON:          // 0x0003
+            if (outputs_control.power == 1) {
+                control_word = (control_word & ~CONTROL_MASK) | CONTROL_ENABLE_OPERATION;
+            } else {
+                control_word = (control_word & ~CONTROL_MASK) | CONTROL_SWITCH_ON;
+            }
+            break;
+        case STATUS_OPERATION_ENABLED:  // 0x0007
+            if (outputs_control.power == 1) {
+                control_word = (control_word & ~CONTROL_MASK) | CONTROL_ENABLE_OPERATION;
+            } else {
+                control_word = (control_word & ~CONTROL_MASK) | CONTROL_SWITCH_ON;
+            }
+            break;
+    }
+
+    if (status_word & STATUS_FAULT) {
+        if (outputs_control.fault == 1) {
+            control_word |= CONTROL_FAULT_RESET;
+        }
+    }
 
     // outputs
     memcpy(&user_outputs_buf[control_word_offset], &control_word, sizeof(control_word));
@@ -325,10 +320,6 @@ void dsp402_device::tick() {
             &outputs_buf[control_word_offset + sizeof(control_word) + sizeof(control_t)], 
             user_outputs.pd->length - control_word_offset - sizeof(control_word));
     user_outputs.pd->push(user_outputs.hash);
-
-    if (user_outputs.trigger != nullptr) {
-        user_outputs.trigger->trigger_modules();
-    }
 }
 
 //! construction
@@ -397,9 +388,6 @@ int dsp402::set_state(module_state_t state) {
                 break;
         case preop_2_init:
             // ====> deinit devices
-            
-            // remove stream device
-            //k.remove_device(shared_from_this());
         case init_2_init:
             // ====> do nothing
             break;
@@ -408,9 +396,6 @@ int dsp402::set_state(module_state_t state) {
         case init_2_safeop:
         case init_2_preop:
             // ====> initial devices            
-            // add stream device
-            //k.add_device(shared_from_this());
-
             if (    (transition == init_2_preop))
                 break;
         case preop_2_op:
@@ -448,8 +433,6 @@ YAML::Emitter& operator<<(YAML::Emitter& out, const module_dsp402::dsp402_device
     out << YAML::Key << "name" << YAML::Value << dev.name;
     out << YAML::Key << "pdin" << YAML::Value << dev.user_inputs_name;
     out << YAML::Key << "pdout" << YAML::Value << dev.user_outputs_name;
-    out << YAML::Key << "pdin_trigger" << YAML::Value << dev.user_inputs_trigger_name;
-    out << YAML::Key << "pdout_trigger" << YAML::Value << dev.user_outputs_trigger_name;
     out << YAML::Key << "status_word_offset" << YAML::Value << dev.status_word_offset;
     out << YAML::Key << "control_word_offset" << YAML::Value << dev.control_word_offset;
     out << YAML::Key << "status_word_name" << YAML::Value << dev.status_word_name;
