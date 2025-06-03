@@ -77,7 +77,7 @@ static std::map<std::string, size_t> datatype_to_size = {
 };
 
 dsp402_device::dsp402_device(dsp402 *parent, const YAML::Node& node) :
-    pd_consumer(parent->name), pd_provider(parent->name), parent(parent)
+    parent(parent)
 {
     config = YAML::Clone(node);
 
@@ -154,28 +154,32 @@ std::string create_process_data_definition(const std::string& type_prefix, const
 void dsp402_device::open() {
     kernel& k = *kernel::get_instance();
     
-    user_inputs.pd       = k.get_process_data(user_inputs_name);
-    user_inputs.hash     = user_inputs.pd->set_consumer(shared_from_this());
+    user_inputs.pd = k.get_process_data(user_inputs_name);
+    user_inputs.consumer = make_shared<pd_consumer>(parent->name + "." + name + ".user_inputs");
+    user_inputs.pd->set_consumer(user_inputs.consumer);
     
-    user_outputs.pd      = k.get_process_data(user_outputs_name);
-    user_outputs.hash    = user_outputs.pd->set_provider(shared_from_this());
+    user_outputs.pd = k.get_process_data(user_outputs_name);
+    user_outputs.provider = make_shared<pd_provider>(parent->name + "." + name + ".user_outputs");
+    user_outputs.pd->set_provider(user_outputs.provider);
 
     off_t inputs_length = 0;
     std::string inputs_def = create_process_data_definition(prefix_entries ? user_inputs.pd->id() : "",
             user_inputs.pd->process_data_definition, inputs_length, 
             status_word_name, status_word_offset);
-    inputs.trigger       = make_shared<trigger_cb>(std::bind(&dsp402_device::tick_inputs, shared_from_this()));
-    inputs.pd            = make_shared<triple_buffer>(inputs_length, parent->name, name + ".inputs", inputs_def);
-    inputs.hash          = inputs.pd->set_provider(shared_from_this());
+    inputs.trigger = make_shared<trigger_cb>(std::bind(&dsp402_device::tick_inputs, shared_from_this()));
+    inputs.pd = make_shared<triple_buffer>(inputs_length, parent->name, name + ".inputs", inputs_def);
+    inputs.provider = make_shared<pd_provider>(parent->name + "." + name + ".inputs");     
+    inputs.pd->set_provider(inputs.provider);
     k.add_device(inputs.pd);
 
     off_t outputs_length = 0;
     std::string outputs_def = create_process_data_definition(prefix_entries ? user_outputs.pd->id() : "",
             user_outputs.pd->process_data_definition, outputs_length, 
             control_word_name, control_word_offset);
-    outputs.trigger      = make_shared<trigger_cb>(std::bind(&dsp402_device::tick_outputs_update, shared_from_this()));
-    outputs.pd           = make_shared<triple_buffer>(outputs_length, parent->name, name + ".outputs", outputs_def);
-    outputs.hash         = outputs.pd->set_consumer(shared_from_this());
+    outputs.trigger = make_shared<trigger_cb>(std::bind(&dsp402_device::tick_outputs_update, shared_from_this()));
+    outputs.pd = make_shared<triple_buffer>(outputs_length, parent->name, name + ".outputs", outputs_def);
+    outputs.consumer = make_shared<pd_consumer>(parent->name + "." + name + ".outputs");
+    outputs.pd->set_consumer(outputs.consumer);
 
     parent->log(info, "%s: adding trigger to %s\n", name.c_str(), user_inputs.pd->trigger_dev->id().c_str());
     user_inputs.pd->trigger_dev->add_trigger(inputs.trigger);
@@ -194,19 +198,24 @@ void dsp402_device::close() {
     outputs.trigger = nullptr;
 
     kernel& k = *kernel::get_instance();
+
+    outputs.pd->reset_consumer(outputs.consumer);
     k.remove_device(outputs.pd);
+    outputs.consumer = nullptr;
     outputs.pd = nullptr;
 
+    inputs.pd->reset_provider(inputs.provider);
     k.remove_device(inputs.pd);
+    inputs.provider = nullptr;
     inputs.pd = nullptr;
 
-    user_inputs.pd->reset_consumer(user_inputs.hash);
+    user_inputs.pd->reset_consumer(user_inputs.consumer);
     user_inputs.pd = nullptr;
-    user_inputs.hash = 0;
+    user_inputs.consumer = nullptr;
 
-    user_outputs.pd->reset_provider(user_outputs.hash);
+    user_outputs.pd->reset_provider(user_outputs.provider);
     user_outputs.pd = nullptr;
-    user_outputs.hash = 0;
+    user_outputs.provider = nullptr;
 }
 
 
@@ -237,8 +246,8 @@ control_word_offset = 0
 */
 
 void dsp402_device::tick_inputs() {
-    auto inputs_buf = inputs.pd->next(inputs.hash);
-    auto user_inputs_buf = user_inputs.pd->pop(user_inputs.hash);
+    auto inputs_buf = inputs.pd->next(inputs.provider);
+    auto user_inputs_buf = user_inputs.pd->pop(user_inputs.consumer);
 
     control_t inputs_control;
 
@@ -266,14 +275,14 @@ void dsp402_device::tick_inputs() {
     memcpy(&inputs_buf[status_word_offset + 2], &inputs_control, sizeof(control_t));
     memcpy(&inputs_buf[status_word_offset + 2 + sizeof(control_t)],
             &user_inputs_buf[status_word_offset + 2], user_inputs.pd->length - status_word_offset - 2); 
-    inputs.pd->push(inputs.hash);
+    inputs.pd->push(inputs.provider);
 }
 
 void dsp402_device::tick_outputs_update() {
-    auto outputs_buf = outputs.pd->pop(outputs.hash);
+    auto outputs_buf = outputs.pd->pop(outputs.consumer);
 
     auto user_inputs_buf = user_inputs.pd->peek();
-    auto user_outputs_buf = user_outputs.pd->next(user_outputs.hash);
+    auto user_outputs_buf = user_outputs.pd->next(user_outputs.provider);
 
     control_t &outputs_control = *(control_t *)&outputs_buf[control_word_offset + 2];
 
@@ -319,7 +328,7 @@ void dsp402_device::tick_outputs_update() {
     memcpy(&user_outputs_buf[control_word_offset + sizeof(control_word)], 
             &outputs_buf[control_word_offset + sizeof(control_word) + sizeof(control_t)], 
             user_outputs.pd->length - control_word_offset - sizeof(control_word));
-    user_outputs.pd->push(user_outputs.hash);
+    user_outputs.pd->push(user_outputs.provider);
 }
 
 //! construction

@@ -51,9 +51,7 @@ class trigger_cb : public robotkernel::trigger_base {
 };
 
 class dsp402_device : 
-    public std::enable_shared_from_this<dsp402_device>,
-    public robotkernel::pd_consumer,
-    public robotkernel::pd_provider
+    public std::enable_shared_from_this<dsp402_device>
 {
     public:
         dsp402 *parent;
@@ -76,7 +74,8 @@ class dsp402_device :
         typedef struct {
             std::shared_ptr<trigger_cb> trigger;
             robotkernel::sp_process_data_t pd;
-            size_t hash;
+            robotkernel::sp_pd_provider_t provider;
+            robotkernel::sp_pd_consumer_t consumer;
         } pd_t;
 
         pd_t user_inputs;     //!< inputs from other module
