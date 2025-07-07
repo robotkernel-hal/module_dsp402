@@ -20,25 +20,23 @@
  * along with robotkernel.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __DSP402_H__
-#define __DSP402_H__
+#ifndef MODULE_DSP402__DSP402_H
+#define MODULE_DSP402__DSP402_H
 
-#include "robotkernel/kernel.h"
 #include "robotkernel/module_base.h"
 #include "robotkernel/stream.h"
+#include "robotkernel/process_data.h"
+
 #include <string>
+
 #include "yaml-cpp/yaml.h"
 
 namespace module_dsp402 { class dsp402_device; };
 YAML::Emitter& operator<<(YAML::Emitter& out, const module_dsp402::dsp402_device& dev);
 
 namespace module_dsp402 {
-#ifdef EMACS
-}
-#endif
 
 class dsp402;
-
 
 class trigger_cb : public robotkernel::trigger_base {
     public:
@@ -115,21 +113,18 @@ class dsp402 :
         ~dsp402();
 
         //! init func
-        void init();
+        virtual void init() override;
 
-        //! set fts state
-        /*!
-         * \param state new fts state
-         */
-        int set_state(module_state_t state);
+        //! State transition from SAFEOP to PREOP
+        virtual void set_state_safeop_2_preop() override;
+
+        //! State transition from PREOP to SAFEOP
+        virtual void set_state_preop_2_safeop() override;
 
         std::list<std::shared_ptr<dsp402_device> > devices;
 };
 
-#ifdef EMACS
-{
-#endif
 }; // namespace module_dsp402
 
-#endif /* __DSP402_H__ */
+#endif /* MODULE_DSP402__DSP402_H */
 

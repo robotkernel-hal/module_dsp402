@@ -26,7 +26,6 @@
 #include "dsp402.h"
 
 #include "robotkernel/helpers.h"
-#include "robotkernel/kernel.h"
 #include "robotkernel/exceptions.h"
 
 MODULE_DEF(module_dsp402, module_dsp402::dsp402);
@@ -152,13 +151,11 @@ std::string create_process_data_definition(const std::string& type_prefix, const
 }
 
 void dsp402_device::open() {
-    kernel& k = *kernel::get_instance();
-    
-    user_inputs.pd = k.get_process_data(user_inputs_name);
+    user_inputs.pd = robotkernel::get_device<process_data>(user_inputs_name);
     user_inputs.consumer = make_shared<pd_consumer>(parent->name + "." + name + ".user_inputs");
     user_inputs.pd->set_consumer(user_inputs.consumer);
     
-    user_outputs.pd = k.get_process_data(user_outputs_name);
+    user_outputs.pd = robotkernel::get_device<process_data>(user_outputs_name);
     user_outputs.provider = make_shared<pd_provider>(parent->name + "." + name + ".user_outputs");
     user_outputs.pd->set_provider(user_outputs.provider);
 
@@ -170,7 +167,7 @@ void dsp402_device::open() {
     inputs.pd = make_shared<triple_buffer>(inputs_length, parent->name, name + ".inputs", inputs_def);
     inputs.provider = make_shared<pd_provider>(parent->name + "." + name + ".inputs");     
     inputs.pd->set_provider(inputs.provider);
-    k.add_device(inputs.pd);
+    robotkernel::add_device(inputs.pd);
 
     off_t outputs_length = 0;
     std::string outputs_def = create_process_data_definition(prefix_entries ? user_outputs.pd->id() : "",
@@ -185,7 +182,7 @@ void dsp402_device::open() {
     user_inputs.pd->trigger_dev->add_trigger(inputs.trigger);
     outputs.pd->trigger_dev->add_trigger(outputs.trigger);
 
-    k.add_device(outputs.pd);
+    robotkernel::add_device(outputs.pd);
 }
 
 void dsp402_device::close() {
@@ -197,15 +194,13 @@ void dsp402_device::close() {
     outputs.pd->trigger_dev->remove_trigger(outputs.trigger);
     outputs.trigger = nullptr;
 
-    kernel& k = *kernel::get_instance();
-
     outputs.pd->reset_consumer(outputs.consumer);
-    k.remove_device(outputs.pd);
+    robotkernel::remove_device(outputs.pd);
     outputs.consumer = nullptr;
     outputs.pd = nullptr;
 
     inputs.pd->reset_provider(inputs.provider);
-    k.remove_device(inputs.pd);
+    robotkernel::remove_device(inputs.pd);
     inputs.provider = nullptr;
     inputs.pd = nullptr;
 
@@ -371,70 +366,21 @@ dsp402::~dsp402() {
     set_state(module_state_init);
 }
 
-//! set fts state
-/*!
- * \param state new fts state
- */
-int dsp402::set_state(module_state_t state) {
-    // get transition
-    uint32_t transition = GEN_STATE(this->state, state);
+//! State transition from SAFEOP to PREOP
+void dsp402::set_state_safeop_2_preop() {
+    for (const auto& dev : devices)
+        dev->close();
+}
 
-    switch (transition) {
-        case op_2_safeop:
-        case op_2_preop:
-        case op_2_init:
-            // ====> stop sending commands
-            if (    (transition == op_2_safeop))
-                break;
-        case safeop_2_preop:
-        case safeop_2_init:
-            // ====> stop receiving measurements
-            for (const auto& dev : devices)
-                dev->close();
+//! State transition from PREOP to SAFEOP
+void dsp402::set_state_preop_2_safeop() {
+    for (const auto& dev : devices) {
+        dev->open();
 
-            if (    (transition == op_2_preop) ||
-                    (transition == safeop_2_preop))
-                break;
-        case preop_2_init:
-            // ====> deinit devices
-        case init_2_init:
-            // ====> do nothing
-            break;
-
-        case init_2_op:
-        case init_2_safeop:
-        case init_2_preop:
-            // ====> initial devices            
-            if (    (transition == init_2_preop))
-                break;
-        case preop_2_op:
-        case preop_2_safeop:
-            // ====> start receiving measurements
-            for (const auto& dev : devices) {
-                dev->open();
-
-                YAML::Emitter emitter;
-                emitter << *dev;
-                log(verbose, "opened device: \n%s\n", emitter.c_str());
-            }
-
-            if (    (transition == init_2_safeop) ||
-                    (transition == preop_2_safeop))
-                break;
-        case safeop_2_op:
-            // ====> start sending commands
-            break;
-        case op_2_op:
-        case safeop_2_safeop:
-        case preop_2_preop:
-            // ====> do nothing
-            break;
-
-        default:
-            break;
+        YAML::Emitter emitter;
+        emitter << *dev;
+        log(verbose, "opened device: \n%s\n", emitter.c_str());
     }
-
-    return (this->state = state);
 }
 
 YAML::Emitter& operator<<(YAML::Emitter& out, const module_dsp402::dsp402_device& dev) {
