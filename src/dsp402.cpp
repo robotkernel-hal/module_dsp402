@@ -4,20 +4,21 @@
  */
 
 /*
- * This dsp402 is part of robotkernel.
+ * This file is part of module_dsp402.
  *
- * robotkernel is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * robotkernel is distributed in the hope that it will be useful,
+ * module_dsp402 is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ * 
+ * module_dsp402 is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with robotkernel.  If not, see <http://www.gnu.org/licenses/>.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ * 
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with module_dsp402; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
 #include <algorithm>
@@ -33,7 +34,6 @@ MODULE_DEF(module_dsp402, module_dsp402::dsp402);
 using namespace std;
 using namespace robotkernel;
 using namespace module_dsp402;
-using namespace string_util;
 
 const static uint16_t STATUS_QUICK_STOP_MASK        = 0x0020;
 
@@ -123,7 +123,7 @@ std::string create_process_data_definition(const std::string& type_prefix, const
                 field_offset = local_offset;
 
                 emitter << YAML::Key << __datatype_name << YAML::Value << 
-                    format_string("%s.%s", type_prefix.c_str(), __field_name.c_str());
+                    string_printf("%s.%s", type_prefix.c_str(), __field_name.c_str());
                 emitter << YAML::EndMap << YAML::BeginMap;
                 emitter << YAML::Key << "uint8_t" << YAML::Value << "dsp402_power";
                 emitter << YAML::EndMap << YAML::BeginMap;
@@ -136,7 +136,7 @@ std::string create_process_data_definition(const std::string& type_prefix, const
             } else {
                 if (type_prefix != "") {
                     emitter << YAML::Key << __datatype_name << YAML::Value << 
-                        format_string("%s.%s", type_prefix.c_str(), __field_name.c_str());
+                        string_printf("%s.%s", type_prefix.c_str(), __field_name.c_str());
                 } else {
                     emitter << YAML::Key << __datatype_name << YAML::Value <<  __field_name.c_str();
                 }

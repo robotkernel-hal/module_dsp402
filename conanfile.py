@@ -8,3 +8,7 @@ class MainProject(ConanFile):
     description = "Handling of CiA DSP 402 drive profile."
     exports_sources = ["*", "!.gitignore"]
     requires = ["robotkernel/[~6]@robotkernel/unstable", ] 
+    
+    def source(self):
+        self.run(f"sed 's/AC_INIT(.*/AC_INIT([module_dsp402], [{self.version}], [{self.author}])/' configure.ac.in > configure.ac")
+
