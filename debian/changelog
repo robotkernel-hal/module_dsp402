@@ -1,0 +1,61 @@
+module-dsp402 (6.0.0~pre1) unstable; urgency=low
+
+  * chore: conan2 port
+
+ -- Robert Burger <robert.burger@dlr.de>  Wed, 24 Jan 2024 08:17:04 +0100
+
+module-dsp402 (5.0.0) unstable; urgency=low
+
+  * FIX: fault reset handling
+  * MERGE: branch 'master' into release/5.0.0
+  * ADD: info output
+  * Update README.md
+  * Merge branch 'release/5.0.0' of https://rmc-github.robotic.dlr.de/robotkernel/module-dsp402 into release/5.0.0
+  * FIX: dsp402 state machine handling
+  * Merge branch 'release/5.0.0' of rmc-github.robotic.dlr.de:robotkernel/module-dsp402 into release/5.0.0
+  * log output on generated device configs
+  * Update README.md
+  * FIX: new robotkernel-5 5.0.21 version
+  * MERGE: branch 'release/5.0.0' of rmc-github.robotic.dlr.de:robotkernel/module-dsp402 into release/5.0.0
+  * CHANGE: using template helper from robotkernel 5.0.20
+  * Update README.md
+  * Update README.md
+  * UPDATE: README.md example
+  * Merge branch 'release/5.0.0' of rmc-github.robotic.dlr.de:robotkernel/module-dsp402 into release/5.0.0
+  * added example config
+  * FIX: copying pd data
+  * CHANGE: state machine failure flag
+  * FIX: process data description generation
+  * triggering outputs
+  * fixed pd generation
+  * FIX: registering/deregistering trigger and pd devices to robotkernel
+  * ADD: trigger device specification
+  * switching to defaults
+  * switching to defaults
+  * switching to defaults
+  * added architectures
+  * added architectures
+  * added architectures
+  * added architectures
+  * fixed jenkinsfile
+  * fixed jenkinsfile
+  * added architectures
+  * added architectures
+  * build: updated build/ci files for cissy 1.0->2.0
+  * build: updated build/ci files for cissy 1.0->2.0
+  * build: updated build/ci files for cissy 1.0->2.0
+  * changed data type
+  * updated jenkins file
+  * updated requires
+  * added missing m4 script
+  * updated pkg config check
+  * updated requiers
+  * added conan/jenkins stuff
+  * adding doc
+  * adding doc
+  * first idea of an implementation
+  * initial commit
+  * Initial commit
+
+ -- Robert Burger <robert.burger@dlr.de>  Thu, 25 Feb 2021 11:16:52 +0100
+

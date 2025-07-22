@@ -1,0 +1,20 @@
+Source: module-dsp402
+Section: embedded
+Priority: optional
+Maintainer: Robert Burger <robert.burger@dlr.de>
+Build-Depends: debhelper-compat (= 13), robotkernel-dev (>=6), service-provider-process-data-inspection-dev (>=6), service-provider-memory-inspection (>=6)
+Standards-Version: 4.5.1
+Homepage: https://www.burger-system.de/robotkernel/module_dsp402
+Vcs-Browser: https://github.com/robotkernel-hal/module_dsp402.git
+Vcs-Git: https://github.com/robotkernel-hal/module_dsp402.git
+Rules-Requires-Root: no
+
+Package: module-dsp402
+Architecture: any
+Multi-Arch: same
+Depends: robotkernel ${misc:Depends}
+Description: Robotkernel module to communicate with dsp402-hardware.
+  This module implements the CiA DSP 402 state machine. Therefore it 
+  takes an input and output process data with the statusword and the 
+  controlword and exports new process data to control the state 
+  machine in an easier way.
