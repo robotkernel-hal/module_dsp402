@@ -116,7 +116,7 @@ devices:
 
 ---
 
-## 🖼️ State Machine Diagram (Mermaid)
+## 🖼️ State Machine Diagram
 
 ```mermaid
 stateDiagram-v2
@@ -132,8 +132,6 @@ stateDiagram-v2
     FaultReactionActive --> Fault         : Restart
     Fault --> SwitchOnDisabled            : Fault Reset
 ```
-
-*(GitHub will render this Mermaid diagram inline in the README.)*
 
 ---
 
