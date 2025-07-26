@@ -22,6 +22,19 @@ This module wraps the **DSP‑402** drive-control state machine (CiA 402) to sim
 
 ---
 
+## 🧠 Typical Use Case
+
+The module is used in systems with drives/axes that support CiA DSP402 (e.g., Beckhoff AX5000, Elmo, Kollmorgen), enabling the host to easily control the drive's state machine without manually encoding complex Controlword sequences.
+
+---
+
+## 🔌 Dependencies
+
+- [module_ethercat](https::/github.com/robotkernel-hal/module_ethercat.git) or another process data source
+- Real-time capable host for cycle-exact communication (recommended)
+
+---
+
 ## 🧩 Configuration
 
 ### Simple Single-Axis Setup
@@ -113,6 +126,25 @@ devices:
 - **`pdout` / `pdout_trigger`**: Output PDO device and its trigger  
 - **`status_word_name`**, **`control_word_name`**: Field names within the PDO frames for DSP‑402 state logic  
 - The module processes each axis individually, driving transitions based on received `Statusword` and desired states.
+
+---
+
+## 🔄 Runtime Behavior
+
+The module:
+
+1. Reads Statusword from input PDOs.
+2. Applies internal DSP402 state logic.
+3. Outputs an appropriate Controlword to guide the drive into desired states (e.g. Switch On, Enable Operation).
+
+It simplifies FSM control typically required for enabling axes in automation systems.
+
+---
+
+## 🔍 Debugging Tips
+
+- Ensure that pdin and pdout references are correct and that they map to real EtherCAT slave PDOs.
+- Use status_word_name and control_word_name strings that match exactly with your PDO definitions (as per SDO configuration or ESI files).
 
 ---
 
