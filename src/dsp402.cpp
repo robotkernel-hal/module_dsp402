@@ -33,6 +33,7 @@ MODULE_DEF(module_dsp402, module_dsp402::dsp402);
 
 using namespace std;
 using namespace robotkernel;
+using namespace robotkernel::helpers;
 using namespace module_dsp402;
 
 const static uint16_t STATUS_QUICK_STOP_MASK        = 0x0020;
@@ -347,7 +348,7 @@ void dsp402::init() {
     }
 
     std::list<YAML::Node> device_instances_list;
-    robotkernel::parse_templates(config, device_instances_list);
+    parse_templates(config, device_instances_list);
 
     for (const auto& inst : device_instances_list) {
         devices.push_back(make_shared<dsp402_device>(this, inst)); 
