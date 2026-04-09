@@ -1,14 +1,11 @@
 from conan import ConanFile
 
 class MainProject(ConanFile):
-    python_requires = "conan_template/[^5.0.6]@robotkernel/stable"
+    python_requires = "conan_template/[~6]@robotkernel/unstable"
     python_requires_extend = "conan_template.RobotkernelConanFile"
 
     name = "module_dsp402"
     description = "Handling of CiA DSP 402 drive profile."
     exports_sources = ["*", "!.gitignore"]
-    requires = ["robotkernel/[~6]@robotkernel/unstable", ] 
-    
-    def source(self):
-        self.run(f"sed 's/AC_INIT(.*/AC_INIT([{self.name}], [{self.version}], [{self.author}])/' configure.ac.in > configure.ac")
+    requires = ["robotkernel/[~6]@robotkernel/unstable", ]
 
