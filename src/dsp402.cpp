@@ -105,48 +105,47 @@ std::string create_process_data_definition(const std::string& type_prefix, const
     auto node = YAML::Load(input_definition);
 
     YAML::Emitter emitter;
-    emitter << YAML::BeginSeq;
-    for (const auto& entry : node) {
-        emitter << YAML::BeginMap;
+    emitter << YAML::BeginMap;
 
-        for (const auto& kv: entry) {
-            
-            std::string __datatype_name = kv.first.as<std::string>();
-            std::string __field_name    = kv.second.as<std::string>();
-            std::string __ifield_name   = __field_name;
-            std::transform(__ifield_name.begin(), __ifield_name.end(), __ifield_name.begin(), 
-                    [](unsigned char c){ return std::tolower(c); });
+    for (const auto& kv: node) {
+        std::string __datatype_name = get_as<std::string>(kv.second, "type");
+        std::string __field_name    = kv.first.as<std::string>();
+        std::string __ifield_name   = __field_name;
+        std::transform(__ifield_name.begin(), __ifield_name.end(), __ifield_name.begin(), 
+                [](unsigned char c){ return std::tolower(c); });
 
+        if (
+                (__ifield_name == field_name) ||
+                ((field_name == "") && (field_offset == local_offset))) {
+            field_offset = local_offset;
 
-            if (
-                    (__ifield_name == field_name) ||
-                    ((field_name == "") && (field_offset == local_offset))) {
-                field_offset = local_offset;
+            emitter << YAML::Key << string_printf("%s.%s", type_prefix.c_str(), __field_name.c_str()) << 
+                YAML::Value << YAML::BeginMap << 
+                YAML::Key << "type" << YAML::Value << __datatype_name << YAML::EndMap;
 
-                emitter << YAML::Key << __datatype_name << YAML::Value << 
-                    string_printf("%s.%s", type_prefix.c_str(), __field_name.c_str());
-                emitter << YAML::EndMap << YAML::BeginMap;
-                emitter << YAML::Key << "uint8_t" << YAML::Value << "dsp402_power";
-                emitter << YAML::EndMap << YAML::BeginMap;
-                emitter << YAML::Key << "uint8_t" << YAML::Value << "dsp402_brakes";
-                emitter << YAML::EndMap << YAML::BeginMap;
-                emitter << YAML::Key << "uint8_t" << YAML::Value << "dsp402_fault";
-                
-                local_offset += datatype_to_size[__datatype_name];
-                local_offset += sizeof(dsp402_device::control_t);
+            emitter << YAML::Key << "dsp402_power" << YAML::Value << YAML::BeginMap << 
+                YAML::Key << "type" << YAML::Value << "uint8_t" << YAML::EndMap;
+            emitter << YAML::Key << "dsp402_brakes" << YAML::Value << YAML::BeginMap << 
+                YAML::Key << "type" << YAML::Value << "uint8_t" << YAML::EndMap;
+            emitter << YAML::Key << "dsp402_fault" << YAML::Value << YAML::BeginMap << 
+                YAML::Key << "type" << YAML::Value << "uint8_t" << YAML::EndMap;
+
+            local_offset += datatype_to_size[__datatype_name];
+            local_offset += sizeof(dsp402_device::control_t);
+        } else {
+            if (type_prefix != "") {
+                emitter << YAML::Key << string_printf("%s.%s", type_prefix.c_str(), __field_name.c_str()) << 
+                    YAML::Value << YAML::BeginMap << 
+                    YAML::Key << "type" << YAML::Value << __datatype_name << YAML::EndMap;
             } else {
-                if (type_prefix != "") {
-                    emitter << YAML::Key << __datatype_name << YAML::Value << 
-                        string_printf("%s.%s", type_prefix.c_str(), __field_name.c_str());
-                } else {
-                    emitter << YAML::Key << __datatype_name << YAML::Value <<  __field_name.c_str();
-                }
-                local_offset += datatype_to_size[__datatype_name];
+                emitter << YAML::Key << __field_name << YAML::Value << YAML::BeginMap << 
+                    YAML::Key << "type" << YAML::Value << __datatype_name << YAML::EndMap;
             }
+            local_offset += datatype_to_size[__datatype_name];
         }
-
-        emitter << YAML::EndMap;
     }
+
+    emitter << YAML::EndMap;
 
     return std::string(emitter.c_str());
 }
